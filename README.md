@@ -1,6 +1,6 @@
 This repository contains the Python codes used for numerical analysis and figure generation for the manuscript:
 
-**"Coexistence of piRNA and KZFP Defense Systems: Evolutionary Dynamics of Layered Defense against Transposable Elements"**
+**"Coexistence of piRNA and KZFP defense systems: Evolutionary dynamics of layered defense against transposable elements"**
 by Y. Nabeka, and H. Innan.
 
 ## Requirements
