@@ -9,18 +9,18 @@ import math
 import sys
 import pickle
 
+u_fixed  = 0.01
+s_fixed  = 0.005
+pi_fixed = 0.01
 
-pi_fixed  = 0.01
-f_fixed  = 0.75
-c_fixed   = 0.00001
-
-x0_small  = 0.01
-t_end = 200000000
-tol_speed = 1e-10
+x0_small = 0.01
+t_end = 2e9
+tol_speed = 1e-12
 min_time = 50
 grid = 50
 
-# --- Helper functions ---
+
+
 def p_star_func_resident(s, u):
     r = s / (u + 1e-22)
     return np.nan if not (0 <= r < 1) else 1 - np.sqrt(r)
@@ -37,14 +37,27 @@ def check_boundary_stability(s, u):
 def check_kzfp_invasion(s, u, pi, f, c):
     if not check_boundary_stability(s, u):
         return False
+
     ps = p_star_func_resident(s, u)
     ns = n_star_func_resident(s, u, pi)
     if np.isnan(ps) or np.isnan(ns):
         return False
+
     sigma_ben = s * u * ns * f * (1.0 - ps)**2
     return sigma_ben > c
 
-# --- ODE system ---
+def yaxis_range(s, u, pi):
+    ps = p_star_func_resident(s, u)
+    ns = n_star_func_resident(s, u, pi)
+    if np.isnan(ps) or np.isnan(ns):
+        return False
+
+    c_thr_max = s * u * ns * 1.0 * (1.0 - ps)**2
+    upper = 0.8634642194720046 + math.log10(c_thr_max)
+    lower = upper - 4
+    return lower, upper
+
+
 def system_log(t, y, pi, s, u, f, c):
     n, p, x = y
 
@@ -62,12 +75,10 @@ def system_log(t, y, pi, s, u, f, c):
 
     dp_dt = direct_gain - cost + benefit
 
-
     sigma_ben = s * u * n * f * (1.0 - p)**2
     dx_dt = (sigma_ben - c) * x * (1.0 - x)**2
 
     return [dn_dt, dp_dt, dx_dt]
-
 
 def steady_event_log(t, y, pi, s, u, f, c):
     if t < min_time:
@@ -77,7 +88,6 @@ def steady_event_log(t, y, pi, s, u, f, c):
 
 steady_event_log.terminal = True
 steady_event_log.direction = -1
-
 
 def jacobian(vars, pi, s, u, f, c):
     n, p, x_m = vars
@@ -118,14 +128,18 @@ def jacobian(vars, pi, s, u, f, c):
 
 
 
-u_vals = np.logspace(-4, -1, grid)
-s_vals = np.logspace(-4, -1, grid)
-points = [(u, s) for u in u_vals for s in s_vals]
+LOW, UP = yaxis_range(s_fixed, u_fixed, pi_fixed)
+
+f_vals = np.linspace(0, 1, grid)
+c_vals = np.logspace(LOW, UP, grid)
+points = [(f, c) for c in c_vals for f in f_vals]
 
 results = []
-for u, s in tqdm(points, desc="Analyzing (u, s) plane"):
-    n0 = n_star_func_resident(s, u, pi_fixed)
-    p0 = p_star_func_resident(s, u)
+
+for f, c in tqdm(points, desc="Analyzing (f, c) plane"):
+    n0 = n_star_func_resident(s_fixed, u_fixed, pi_fixed)
+    p0 = p_star_func_resident(s_fixed, u_fixed)
+
     if np.isnan(n0) or np.isnan(p0):
         continue
 
@@ -133,7 +147,7 @@ for u, s in tqdm(points, desc="Analyzing (u, s) plane"):
         system_log,
         (0, t_end),
         [n0, p0, x0_small],
-        args=(pi_fixed, s, u, f_fixed, c_fixed),
+        args=(pi_fixed, s_fixed, u_fixed, f, c),
         events=steady_event_log,
         rtol=1e-10,
         atol=1e-12
@@ -141,40 +155,47 @@ for u, s in tqdm(points, desc="Analyzing (u, s) plane"):
 
     nT, pT, xT = sol.y[:, -1]
 
-    p_eq  = pT
+    p_eq = pT
     x_eq = xT
-    n_eq  = nT
+    n_eq = nT
 
 
     if sol.success:
         try:
-            J = jacobian((n_eq, p_eq, x_eq), pi_fixed, s, u, f_fixed, c_fixed)
+            J = jacobian((n_eq, p_eq, x_eq), pi_fixed, s_fixed, u_fixed, f, c)
             eigenvalues = eigvals(J)
-
             real_parts = np.real(eigenvalues)
             max_real = np.max(real_parts)
+
             if max_real < 0:
                 stability_code = 1 if np.any(np.abs(np.imag(eigenvalues)) > 0) else 0
             elif abs(max_real) == 0:
                 stability_code = 2
             else:
                 stability_code = 3 if np.any(real_parts < 0) else 4
+
         except np.linalg.LinAlgError:
             stability_code = 5
     else:
         stability_code = 5
 
     results.append({
-        'u': u, 's': s,
-        'x': x_eq, 'p': p_eq, 'n': n_eq,
-        'stability': stability_code, 'time': sol.t[-1]
+        'f': f,
+        'c': c,
+        'x': x_eq,
+        'p': p_eq,
+        'n': n_eq,
+        'stability': stability_code,
+        'time': sol.t[-1]
     })
 
 
-filename = f'u-vs-s_pi{pi_fixed:.1e}_f{f_fixed:.1e}_c{c_fixed:.1e}.pkl'
+
+filename = f'f-vs-c_u{u_fixed:.1e}_s{s_fixed:.1e}_pi{pi_fixed:.1e}.pkl'
+
 print(f"\nSaving results to file {filename} ...")
 try:
-    with open(filename, 'wb') as f:
+    with open(filename, "wb") as f:
         pickle.dump(results, f)
     print("Saving finished successfully.")
 except Exception as e:

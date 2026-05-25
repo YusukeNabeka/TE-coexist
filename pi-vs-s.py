@@ -1,151 +1,123 @@
-#%%
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 from scipy.integrate import solve_ivp
 from numpy.linalg import eigvals
 from matplotlib.transforms import blended_transform_factory
-
 from tqdm import tqdm
 import math
 import sys
 import pickle
 
-# --- 1. Fixed parameters ---
 u_fixed  = 0.01
-fm_fixed = 0.75
+f_fixed = 0.75
 c_fixed  = 0.00001
-x0_small = 0.01
-t_end, tol_speed, min_time = 100000000, 1e-10, 50
-grid = 50
-tol_freq = 0.1
 
-# --- 2. Helper functions ---
+x0_small = 0.01
+t_end = 2e8
+tol_speed = 1e-10
+min_time = 50
+grid = 50
+
+
 def p_star_func_resident(s, u):
     r = s / (u + 1e-22)
     return np.nan if not (0 <= r < 1) else 1 - np.sqrt(r)
 
 def n_star_func_resident(s, u, pi):
     ps = p_star_func_resident(s, u)
-    if np.isnan(ps) or pi <= 1e-22:
-        return np.nan
-    denom = 1 - 2 * s * ps
-    if abs(denom) < 1e-12:
-        return np.nan
-    n_star = 2 * s * ps / (pi * np.sqrt(u * s + 1e-22) * denom)
-    return np.nan if (n_star < 0 or np.isnan(n_star)) else n_star
+    denom = pi + 2.0 * s * ps
+    n_star = 2.0 * ps * (1.0 - ps) / denom
+    return n_star
 
 def check_boundary_stability(s, u):
-    if not (0 < s < u):
-        return False
-    ps = p_star_func_resident(s, u)
-    if np.isnan(ps):
-        return False
-    return (1 - 2 * s * ps > 1e-9) and (1 - 2 * s * ps**2 > 1e-9)
+    return (0 < s < u)
 
-def check_kzfp_invasion(s, u, pi, fm, c):
+def check_kzfp_invasion(s, u, pi, f, c):
     if not check_boundary_stability(s, u):
         return False
     ps = p_star_func_resident(s, u)
-    denom = pi * np.sqrt(u * s + 1e-22) * (1 - 2 * s * ps)
-    if abs(denom) < 1e-22:
+    ns = n_star_func_resident(s, u, pi)
+    if np.isnan(ps) or np.isnan(ns):
         return False
-    return (2 * (s**3) * ps * fm) / denom > c
+    sigma_ben = s * u * ns * f * (1.0 - ps)**2
+    return sigma_ben > c
 
-# --- 2.5: Safe exp / log utilities ---
-Z_MIN_FOR_EXP = -700.0   # exp(-700) ~ 5e-305
-Z_MAX_FOR_EXP =  50.0
-def safe_exp(z):
-    return np.exp(np.clip(z, Z_MIN_FOR_EXP, Z_MAX_FOR_EXP))
 
-# --- 3. ODE system in log-n variables and event function ---
-def system_log(t, y, pi, s, u, fm, c):
-    """
-    Integrate the system in variables y = [z, p, x], where z = log n.
-    """
-    z, p, xm = y
-    p  = np.clip(p, 0.0, 1.0)
-    xm = np.clip(xm, 0.0, 1.0)
-    n  = safe_exp(z)
 
-    f_bar  = xm * (2 - xm) * fm
-    repress = (1 - f_bar) * (1 - p)**2
+def system_log(t, y, pi, s, u, f, c):
+    n, p, x = y
 
-    dz_dt = u * repress - s
 
-    sel_den = 1 - 2 * s * p
-    if abs(sel_den) > 1e-12:
-        sel_term = s * p * (1 - p) / sel_den
-    else:
-        # fallback in the (numerically) singular region
-        sel_term = np.sign(s * p * (1 - p)) * 1e12
-    dp_dt = (pi/2) * u * repress * n - sel_term
+    f_bar   = x * (2.0 - x) * f
+    repress = (1.0 - f_bar) * (1.0 - p)**2
 
-    sigma_ben = s * u * n * fm * (1 - p)**2
-    dxm_dt = (sigma_ben - c) * xm * (1 - xm)**2
+    dn_dt = n * (u*repress - s)
 
-    return [dz_dt, dp_dt, dxm_dt]
+    direct_gain = (pi / 2.0) * u * repress * n
 
-def steady_event_log(t, y, pi, s, u, fm, c):
+    cost = s * p * (1.0 - p)
+
+    benefit = s * u * repress * n * p
+
+    dp_dt = direct_gain - cost + benefit
+
+    sigma_ben = s * u * n * f * (1.0 - p)**2
+    dx_dt = (sigma_ben - c) * x * (1.0 - x)**2
+
+    return [dn_dt, dp_dt, dx_dt]
+
+
+def steady_event_log(t, y, pi, s, u, f, c):
     if t < min_time:
         return 1.0
-    dz, dp, dx = system_log(t, y, pi, s, u, fm, c)
-    return max(abs(dz), abs(dp), abs(dx)) - tol_speed
+    dn, dp, dx = system_log(t, y, pi, s, u, f, c)
+    return max(abs(dn), abs(dp), abs(dx)) - tol_speed
 
 steady_event_log.terminal = True
 steady_event_log.direction = -1
 
-# --- 3.5: Jacobians ---
-def jacobian_3d(vars, pi, s, u, fm, c):
+
+def jacobian(vars, pi, s, u, f, c):
     n, p, x_m = vars
-    p_calc   = np.clip(p, 0, 1)
-    x_m_calc = np.clip(x_m, 0, 1)
-    n_calc   = max(0.0, n)
-    f_bar = x_m_calc * (2 - x_m_calc) * fm
 
-    J11 = u * (1 - f_bar) * (1 - p_calc)**2 - s
-    J12 = -2 * u * n_calc * (1 - f_bar) * (1 - p_calc)
-    J13 = -2 * u * n_calc * fm * (1 - x_m_calc) * (1 - p_calc)**2
+    f_bar = x_m * (2.0 - x_m) * f
 
-    J21 = (pi/2) * u * (1 - f_bar) * (1 - p_calc)**2
-    term_p_deriv_num = s * (1 - 2 * p_calc + 2 * s * p_calc**2)
-    term_p_deriv_den = (1 - 2 * s * p_calc)**2
-    if abs(term_p_deriv_den) < 1e-12:
-        term_p_deriv_den = np.sign(term_p_deriv_den) * 1e-12 + 1e-13
-    J22 = -pi*u*n_calc*(1 - f_bar)*(1 - p_calc) - term_p_deriv_num/term_p_deriv_den
-    J23 = -pi*u*n_calc*fm*(1 - x_m_calc)*(1 - p_calc)**2
+    one_minus_f = 1.0 - f_bar
+    one_minus_p = 1.0 - p
+    one_minus_x = 1.0 - x_m
 
-    sigma_benefit_val = s*u*n_calc*fm*(1 - p_calc)**2
-    J31 = (s*u*fm*(1 - p_calc)**2)*x_m_calc*((1 - x_m_calc)**2)
-    J32 = (-2*s*u*n_calc*fm*(1 - p_calc))*x_m_calc*((1 - x_m_calc)**2)
-    J33 = (sigma_benefit_val - c)*(1 - x_m_calc)*(1 - 3*x_m_calc)
+    R = one_minus_f * one_minus_p**2
 
-    return np.array([[J11, J12, J13],
-                     [J21, J22, J23],
-                     [J31, J32, J33]])
 
-def jacobian_2d_at_x0(n, p, pi, s, u):
-    """
-    Jacobian of the (n, p) subsystem at the boundary equilibrium x=0 (no KZFP).
-    Here we set f_bar = 0 and evaluate at the numerical equilibrium (n_eq, p_eq).
-    """
-    p = np.clip(p, 0.0, 1.0)
-    n = max(0.0, n)
+    dR_dp = -2.0 * one_minus_f * one_minus_p
+    dR_dx = -2.0 * f * one_minus_x * one_minus_p**2
 
-    J11 = u * (1 - p)**2 - s
-    J12 = -2 * u * n * (1 - p)
+    A = pi / 2.0 + s * p
 
-    J21 = (pi/2) * u * (1 - p)**2
-    term_p_deriv_num = s * (1 - 2 * p + 2 * s * p**2)
-    term_p_deriv_den = (1 - 2 * s * p)**2
-    if abs(term_p_deriv_den) < 1e-12:
-        term_p_deriv_den = np.sign(term_p_deriv_den) * 1e-12 + 1e-13
-    J22 = -pi*u*n*(1 - p) - term_p_deriv_num/term_p_deriv_den
+    J11 = u * R - s
+    J12 = n * u * dR_dp
+    J13 = n * u * dR_dx
 
-    return np.array([[J11, J12],
-                     [J21, J22]])
+    J21 = u * R * A
+    J22 = u * n * (dR_dp * A + R * s) - s * (1.0 - 2.0 * p)
+    J23 = u * n * dR_dx * A
 
-# --- 4. Main computation over (pi, s) plane ---
+    sigma_benefit_val = s * u * n * f * one_minus_p**2
+    sigma = sigma_benefit_val - c
+
+    J31 = s * u * f * one_minus_p**2 * x_m * one_minus_x**2
+    J32 = -2.0 * s * u * n * f * one_minus_p * x_m * one_minus_x**2
+    J33 = sigma * one_minus_x * (1.0 - 3.0 * x_m)
+
+    return np.array([
+        [J11, J12, J13],
+        [J21, J22, J23],
+        [J31, J32, J33]
+    ])
+
+
+
 pi_vals = np.logspace(-4, 0, grid)
 s_vals  = np.logspace(-4, -1.8, grid)
 
@@ -158,43 +130,31 @@ for pi, s in tqdm(points, desc="Analyzing (pi, s) plane"):
     if np.isnan(n0) or np.isnan(p0):
         continue
 
-    # initial n → z = log n
-    z0 = np.log(max(n0, 1e-300))
 
     sol = solve_ivp(
         system_log,
         (0, t_end),
-        [z0, p0, x0_small],
-        args=(pi, s, u_fixed, fm_fixed, c_fixed),
+        [n0, p0, x0_small],
+        args=(pi, s, u_fixed, f_fixed, c_fixed),
         events=steady_event_log,
         rtol=1e-10,
         atol=1e-12
     )
 
-    zT, pT, xT = sol.y[:, -1]
-    nT = float(safe_exp(zT))
+    nT, pT, xT = sol.y[:, -1]
 
-    # project back to the physical domain
-    p_eq  = 0.0 if pT < 0 else (1.0 if pT > 1 else pT)
-    xm_eq = 0.0 if xT < 0 else (1.0 if xT > 1 else xT)
-    n_eq  = max(0.0, nT)
+   
+    p_eq  = pT
+    x_eq = xT
+    n_eq  = nT
 
-    # invasion condition
-    invasion = check_kzfp_invasion(s, u_fixed, pi, fm_fixed, c_fixed)
-    if not invasion:
-        xm_eq = 0.0  # fixed at no KZFP
+    invasion = check_kzfp_invasion(s, u_fixed, pi, f_fixed, c_fixed)
 
-    # stability classification
+
     if sol.success:
         try:
-            if invasion and xm_eq > 0:
-                # KZFP can invade: use full 3D Jacobian
-                J = jacobian_3d((n_eq, p_eq, xm_eq), pi, s, u_fixed, fm_fixed, c_fixed)
-                eigenvalues = eigvals(J)
-            else:
-                # no invasion: use 2D Jacobian at x=0
-                J2 = jacobian_2d_at_x0(n_eq, p_eq, pi, s, u_fixed)
-                eigenvalues = eigvals(J2)
+            J = jacobian((n_eq, p_eq, x_eq), pi, s, u_fixed, f_fixed, c_fixed)
+            eigenvalues = eigvals(J)
 
             real_parts = np.real(eigenvalues)
             max_real = np.max(real_parts)
@@ -211,12 +171,11 @@ for pi, s in tqdm(points, desc="Analyzing (pi, s) plane"):
 
     results.append({
         'pi': pi, 's': s,
-        'xm': xm_eq, 'p': p_eq, 'n': n_eq,
+        'x': x_eq, 'p': p_eq, 'n': n_eq,
         'stability': stability_code, 'time': sol.t[-1]
     })
 
-# --- Save results with pickle ---
-filename = f'pi-vs-s_u{u_fixed:.1e}_f{fm_fixed:.1e}_c{c_fixed:.1e}.pkl'
+filename = f'pi-vs-s_u{u_fixed:.1e}_f{f_fixed:.1e}_c{c_fixed:.1e}.pkl'
 
 print(f"\nSaving results to file {filename} ...")
 try:

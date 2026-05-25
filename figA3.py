@@ -1,3 +1,4 @@
+#figA3
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
@@ -6,16 +7,16 @@ import math
 pi_fixed = 0.01
 c_fixed = 0.00001
 
-fm_fixed = 0.25
-fm_fixed1 = 0.5
-fm_fixed2 = 0.75
-fm_fixed3 = 0.9
+f_fixed = 0.0
+f_fixed1 = 0.25
+f_fixed2 = 0.5
+f_fixed3 = 0.75
 
 
-filename = f"u-vs-s_pi{pi_fixed:.1e}_f{fm_fixed:.1e}_c{c_fixed:.1e}.pkl"
-filename1 = f"u-vs-s_pi{pi_fixed:.1e}_f{fm_fixed1:.1e}_c{c_fixed:.1e}.pkl"
-filename2 = f"u-vs-s_pi{pi_fixed:.1e}_f{fm_fixed2:.1e}_c{c_fixed:.1e}.pkl"
-filename3 = f"u-vs-s_pi{pi_fixed:.1e}_f{fm_fixed3:.1e}_c{c_fixed:.1e}.pkl"
+filename = f"u-vs-s_pi{pi_fixed:.1e}_f{f_fixed:.1e}_c{c_fixed:.1e}.pkl"
+filename1 = f"u-vs-s_pi{pi_fixed:.1e}_f{f_fixed1:.1e}_c{c_fixed:.1e}.pkl"
+filename2 = f"u-vs-s_pi{pi_fixed:.1e}_f{f_fixed2:.1e}_c{c_fixed:.1e}.pkl"
+filename3 = f"u-vs-s_pi{pi_fixed:.1e}_f{f_fixed3:.1e}_c{c_fixed:.1e}.pkl"
 
 with open(filename, "rb") as f:
     res = pickle.load(f)
@@ -38,71 +39,27 @@ def p_star_func(s, u):
 
 def n_star_func(s, u, pi):
     ps = p_star_func(s, u)
-    if np.isnan(ps):
-        return np.nan
-    denom = 1 - 2 * s * ps
-    if denom <= 1e-9:
-        return np.nan
-    n_star = 2 * s * ps / (pi * np.sqrt(u * s + 1e-22) * denom)
-    return n_star if n_star > 0 else np.nan
-
+    denom = pi + 2.0 * s * ps
+    n_star = 2.0 * ps * (1.0 - ps) / denom
+    return n_star
 
 def check_stability_full(s, u):
-    if not (0 < s < u):
-        return False
-    ps = p_star_func(s, u)
-    if np.isnan(ps):
-        return False
-    return (1 - 2 * s * ps > 1e-9) and (1 - 2 * s * (ps**2) > 1e-9)
+    return (0 < s < u)
 
 
-def yaxis_range(s, u, pi):
-    ps = p_star_func(s, u)
-    denom = pi * np.sqrt(u * s + 1e-22) * (1 - 2 * s * ps)
-    if abs(denom) < 1e-22:
-        return False
-    upper = 0.8634642194720046 + math.log10((2 * (s**3) * ps * 1) / denom)
-    lower = upper - 4
-    return lower, upper
-
-
-def check_kzfp_invasion(s, u, pi, fm, c):
+def check_kzfp_invasion(s, u, pi, f, c):
     if not check_stability_full(s, u):
         return False
     ps = p_star_func(s, u)
-    denom = pi * np.sqrt(u * s + 1e-22) * (1 - 2 * s * ps)
-    if abs(denom) < 1e-22:
+    ns = n_star_func(s, u, pi)
+    if np.isnan(ps) or np.isnan(ns):
         return False
-    return (2 * (s**3) * ps * fm) / denom > c
-
-
-def system(t, y, pi, s, u, fm, c):
-    n, p, xm = y
-    p = np.clip(p, 0, 1)
-    xm = np.clip(xm, 0, 1)
-    n = max(n, 0)
-
-    f_bar = xm * (2 - xm) * fm
-    repress = (1 - f_bar) * (1 - p) ** 2
-    dn_dt = u * repress * n - s * n
-
-    sel_den = 1 - 2 * s * p
-    sel_term = (
-        s * p * (1 - p) / sel_den
-        if abs(sel_den) > 1e-12
-        else np.sign(s * p * (1 - p)) * 1e12
-    )
-
-    dp_dt = (pi / 2) * u * repress * n - sel_term
-    sigma_ben = s * u * n * fm * (1 - p) ** 2
-    dxm_dt = (sigma_ben - c) * xm * (1 - xm) ** 2
-
-    return [dn_dt, dp_dt, dxm_dt]
-
+    sigma_ben = s * u * ns * f * (1 - ps) ** 2
+    return sigma_ben > c
 
 def sigma_y1_zero_curve_us(
     pi,
-    fm,
+    f,
     c,
     npts=1200,
     y_eps=1e-6,
@@ -113,48 +70,56 @@ def sigma_y1_zero_curve_us(
     s_max=1e-1,
 ):
 
+
+    if f <= 0.0 or f >= 1.0:
+        return np.array([]), np.array([])
+
     y = np.linspace(y_eps, 1.0 - y_eps, npts)
-    A = (2.0 * fm / ((1.0 - fm) * c * pi)) * y * (1.0 - y)
 
-    disc = (1.0 - y) ** 2 + A
-    s = ((1.0 - y) + np.sqrt(disc)) / A
+    A = 2.0 * f * y * (1.0 - y) / (1.0 - f)
 
-    u = s / ((1.0 - fm) * y**2)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        disc = c**2 * (1.0 - y)**2 + A * c * pi
+        s = (c * (1.0 - y) + np.sqrt(disc)) / A
+        u = s / ((1.0 - f) * y**2)
 
-    good = np.isfinite(u) & np.isfinite(s) & (u > 0) & (s > 0)
+    good = (
+        np.isfinite(u)
+        & np.isfinite(s)
+    )
 
     if mask_invasion:
-        inv = np.vectorize(check_kzfp_invasion)(s, u, pi, fm, c)
+        inv = np.vectorize(check_kzfp_invasion)(s, u, pi, f, c)
         good &= inv
 
     u_line = np.where(good, u, np.nan)
     s_line = np.where(good, s, np.nan)
-    return u_line, s_line
 
+    return u_line, s_line
 
 us = [r["u"] for r in res]
 ss = [r["s"] for r in res]
-xm_final = [r["xm"] for r in res]
+x_final = [r["x"] for r in res]
 p_final = [r["p"] for r in res]
 n_final = [r["n"] for r in res]
 
 
 us1 = [r["u"] for r in res1]
 ss1 = [r["s"] for r in res1]
-xm_final1 = [r["xm"] for r in res1]
+x_final1 = [r["x"] for r in res1]
 p_final1 = [r["p"] for r in res1]
 n_final1 = [r["n"] for r in res1]
 
 us2 = [r["u"] for r in res2]
 ss2 = [r["s"] for r in res2]
-xm_final2 = [r["xm"] for r in res2]
+x_final2 = [r["x"] for r in res2]
 p_final2 = [r["p"] for r in res2]
 n_final2 = [r["n"] for r in res2]
 
 
 us3 = [r["u"] for r in res3]
 ss3 = [r["s"] for r in res3]
-xm_final3 = [r["xm"] for r in res3]
+x_final3 = [r["x"] for r in res3]
 p_final3 = [r["p"] for r in res3]
 n_final3 = [r["n"] for r in res3]
 
@@ -192,7 +157,7 @@ ax789 = [ax_dict["7"], ax_dict["8"], ax_dict["9"]]
 u_bg = np.logspace(-4, -1, 500)
 s_bg = np.logspace(-4, -1, 500)
 U_bg, S_bg = np.meshgrid(u_bg, s_bg)
-inv_map = np.vectorize(check_kzfp_invasion)(S_bg, U_bg, pi_fixed, fm_fixed, c_fixed)
+inv_map = np.vectorize(check_kzfp_invasion)(S_bg, U_bg, pi_fixed, f_fixed, c_fixed)
 
 u_bg1 = np.logspace(-4, -1, 500)
 s_bg1 = np.logspace(-4, -1, 500)
@@ -201,7 +166,7 @@ inv_map1 = np.vectorize(check_kzfp_invasion)(
     S_bg1,
     U_bg1,
     pi_fixed,
-    fm_fixed1,
+    f_fixed1,
     c_fixed,
 )
 
@@ -212,7 +177,7 @@ inv_map2 = np.vectorize(check_kzfp_invasion)(
     S_bg2,
     U_bg2,
     pi_fixed,
-    fm_fixed2,
+    f_fixed2,
     c_fixed,
 )
 
@@ -223,7 +188,7 @@ inv_map3 = np.vectorize(check_kzfp_invasion)(
     S_bg3,
     U_bg3,
     pi_fixed,
-    fm_fixed3,
+    f_fixed3,
     c_fixed,
 )
 
@@ -245,7 +210,7 @@ for ax in ax123:
 sc1 = ax_dict["1"].scatter(
     us1,
     ss1,
-    c=xm_final1,
+    c=x_final1,
     cmap="viridis",
     vmin=0,
     vmax=1,
@@ -253,15 +218,15 @@ sc1 = ax_dict["1"].scatter(
     marker="s",
     s=35,
 )
-cbar1 = fig.colorbar(sc1, ax=ax_dict["1"], label="$x_{1eq}$", pad=0.05, aspect=14)
-cbar1.set_label("$x_{1eq}$", size=15)
+cbar1 = fig.colorbar(sc1, ax=ax_dict["1"], label="$x_{eq}$", pad=0.05, aspect=14)
+cbar1.set_label("$x_{eq}$", size=15)
 cbar1.ax.tick_params(labelsize=15)
 
 sc2 = ax_dict["2"].scatter(
     us1,
     ss1,
     c=p_final1,
-    cmap="plasma",
+    cmap="viridis",
     vmin=0,
     vmax=1,
     edgecolor="none",
@@ -312,7 +277,7 @@ for ax in ax456:
 sc1 = ax_dict["4"].scatter(
     us2,
     ss2,
-    c=xm_final2,
+    c=x_final2,
     cmap="viridis",
     vmin=0,
     vmax=1,
@@ -320,15 +285,15 @@ sc1 = ax_dict["4"].scatter(
     marker="s",
     s=35,
 )
-cbar1 = fig.colorbar(sc1, ax=ax_dict["4"], label="$x_{1eq}$", pad=0.05, aspect=14)
-cbar1.set_label("$x_{1eq}$", size=15)
+cbar1 = fig.colorbar(sc1, ax=ax_dict["4"], label="$x_{eq}$", pad=0.05, aspect=14)
+cbar1.set_label("$x_{eq}$", size=15)
 cbar1.ax.tick_params(labelsize=15)
 
 sc2 = ax_dict["5"].scatter(
     us2,
     ss2,
     c=p_final2,
-    cmap="plasma",
+    cmap="viridis",
     vmin=0,
     vmax=1,
     edgecolor="none",
@@ -380,7 +345,7 @@ for ax in ax789:
 sc1 = ax_dict["7"].scatter(
     us3,
     ss3,
-    c=xm_final3,
+    c=x_final3,
     cmap="viridis",
     vmin=0,
     vmax=1,
@@ -388,15 +353,15 @@ sc1 = ax_dict["7"].scatter(
     marker="s",
     s=35,
 )
-cbar1 = fig.colorbar(sc1, ax=ax_dict["7"], label="$x_{1eq}$", pad=0.05, aspect=14)
-cbar1.set_label("$x_{1eq}$", size=15)
+cbar1 = fig.colorbar(sc1, ax=ax_dict["7"], label="$x_{eq}$", pad=0.05, aspect=14)
+cbar1.set_label("$x_{eq}$", size=15)
 cbar1.ax.tick_params(labelsize=15)
 
 sc2 = ax_dict["8"].scatter(
     us3,
     ss3,
     c=p_final3,
-    cmap="plasma",
+    cmap="viridis",
     vmin=0,
     vmax=1,
     edgecolor="none",
@@ -432,7 +397,7 @@ cbar3.ax.tick_params(labelsize=15)
 sc1 = ax_dict["A"].scatter(
     us,
     ss,
-    c=xm_final,
+    c=x_final,
     cmap="viridis",
     vmin=0,
     vmax=1,
@@ -440,11 +405,11 @@ sc1 = ax_dict["A"].scatter(
     marker="s",
     s=35,
 )
-cbar1 = fig.colorbar(sc1, ax=ax_dict["A"], label="$x_{1eq}$", pad=0.05, aspect=14)
-cbar1.set_label("$x_{1eq}$", size=15)
+cbar1 = fig.colorbar(sc1, ax=ax_dict["A"], label="$x_{eq}$", pad=0.05, aspect=14)
+cbar1.set_label("$x_{eq}$", size=15)
 cbar1.ax.tick_params(labelsize=15)
 ax_dict["A"].set_title(
-    "$x_{1eq}$ \n(Equilibrium KZFP Frequency)",
+    "$x_{eq}$ \n(Equilibrium KZFP Frequency)",
     fontsize=18,
     y=1.15,
 )
@@ -453,7 +418,7 @@ sc2 = ax_dict["B"].scatter(
     us,
     ss,
     c=p_final,
-    cmap="plasma",
+    cmap="viridis",
     vmin=0,
     vmax=1,
     edgecolor="none",
@@ -519,7 +484,7 @@ bboxA = ax_dict["A"].get_position()
 fig.text(
     0.02,
     bboxA.y0 + 0.08,
-    f"$f_1$={fm_fixed}",
+    f"$f$={f_fixed}",
     fontsize=20,
     color="k",
     rotation=90,
@@ -529,7 +494,7 @@ bbox1 = ax_dict["1"].get_position()
 fig.text(
     0.02,
     bbox1.y0 + 0.07,
-    f"$f_1$={fm_fixed1}",
+    f"$f$={f_fixed1}",
     fontsize=20,
     color="k",
     rotation=90,
@@ -539,7 +504,7 @@ bbox2 = ax_dict["4"].get_position()
 fig.text(
     0.02,
     bbox2.y0 + 0.06,
-    f"$f_1$={fm_fixed2}",
+    f"$f$={f_fixed2}",
     fontsize=20,
     color="k",
     rotation=90,
@@ -549,13 +514,13 @@ bbox3 = ax_dict["7"].get_position()
 fig.text(
     0.02,
     bbox3.y0 + 0.05,
-    f"$f_1$={fm_fixed3}",
+    f"$f$={f_fixed3}",
     fontsize=20,
     color="k",
     rotation=90,
 )
 
-u_line, s_line = sigma_y1_zero_curve_us(pi_fixed, fm_fixed, c_fixed, mask_invasion=True)
+u_line, s_line = sigma_y1_zero_curve_us(pi_fixed, f_fixed, c_fixed, mask_invasion=True)
 for ax in ax_main:
     ax.plot(u_line, s_line, ls="--", lw=2.5, color="w", alpha=0.9)
     ax.set_xlim(1e-4, 1e-1)
@@ -563,7 +528,7 @@ for ax in ax_main:
 
 u_line1, s_line1 = sigma_y1_zero_curve_us(
     pi_fixed,
-    fm_fixed1,
+    f_fixed1,
     c_fixed,
     mask_invasion=True,
 )
@@ -574,7 +539,7 @@ for ax in ax123:
 
 u_line2, s_line2 = sigma_y1_zero_curve_us(
     pi_fixed,
-    fm_fixed2,
+    f_fixed2,
     c_fixed,
     mask_invasion=True,
 )
@@ -585,7 +550,7 @@ for ax in ax456:
 
 u_line3, s_line3 = sigma_y1_zero_curve_us(
     pi_fixed,
-    fm_fixed3,
+    f_fixed3,
     c_fixed,
     mask_invasion=True,
 )
@@ -595,4 +560,5 @@ for ax in ax789:
     ax.set_ylim(1e-4, 1e-1)
 
 plt.subplots_adjust(wspace=3, hspace=10)
+plt.savefig('figA3.pdf', format="pdf", bbox_inches='tight')
 plt.show()

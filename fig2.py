@@ -1,3 +1,4 @@
+#fig2
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -5,13 +6,10 @@ import matplotlib.pyplot as plt
 def K_slope(s, u, pi):
     if not (0 < s < u):
         return np.nan
-    num = 2 * s**3 * (1 - np.sqrt(s / u))
-    den = pi * np.sqrt(s * u) * (1 - 2 * s * (1 - np.sqrt(s / u)))
-    if den == 0:
-        return np.nan
+    num = 2*s**2 * (1 - np.sqrt(s / u)) * np.sqrt(s / u)
+    den = pi + 2*s*(1-np.sqrt(s * u))
     K = num / den
-    return K if np.isfinite(K) else np.nan
-
+    return K
 
 def plot_line(ax, K, f1_grid, label, **kw):
     if not np.isfinite(K) or K <= 0:
@@ -46,7 +44,7 @@ for s in s_list:
     plot_line(ax, K, f1, label=fr"$s={s:.2g}$", lw=2)
 
 ax.set_title("Effect of $s$", size=18)
-ax.set_xlabel(r"$f_1$ (suppression efficacy)", size=15)
+ax.set_xlabel(r"$f$ (suppression efficacy)", size=15)
 ax.set_ylabel(r"$c$ (maintenance cost)", size=15)
 ax.set_yscale("log")
 ax.set_xlim(-0.01, 1.01)
@@ -72,7 +70,7 @@ for u in u_list:
     plot_line(ax, K, f1, label=fr"$u={u:.2g}$", lw=2)
 
 ax.set_title("Effect of $u$", size=18)
-ax.set_xlabel(r"$f_1$ (suppression efficacy)", size=15)
+ax.set_xlabel(r"$f$ (suppression efficacy)", size=15)
 ax.set_yscale("log")
 ax.set_xlim(-0.01, 1.01)
 ax.set_ylim(1e-8, 2e-3)
@@ -85,7 +83,7 @@ for pi in pi_list:
     plot_line(ax, K, f1, label=fr"$\pi={pi:.2g}$", lw=2)
 
 ax.set_title("Effect of $\pi$", size=18)
-ax.set_xlabel(r"$f_1$ (suppression efficacy)", size=15)
+ax.set_xlabel(r"$f$ (suppression efficacy)", size=15)
 ax.set_yscale("log")
 ax.set_xlim(-0.01, 1.01)
 ax.set_ylim(1e-8, 2e-3)
@@ -99,4 +97,6 @@ fig.text(0.08, 0.96, "A", fontsize=25, color="k", fontweight="bold")
 fig.text(0.39, 0.96, "B", fontsize=25, color="k", fontweight="bold")
 fig.text(0.70, 0.96, "C", fontsize=25, color="k", fontweight="bold")
 
+plt.savefig('fig2.pdf', format="pdf", bbox_inches='tight')
 plt.show()
+
