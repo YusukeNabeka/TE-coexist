@@ -1,4 +1,4 @@
-#fig2
+#fig1
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -97,6 +97,6 @@ fig.text(0.08, 0.96, "A", fontsize=25, color="k", fontweight="bold")
 fig.text(0.39, 0.96, "B", fontsize=25, color="k", fontweight="bold")
 fig.text(0.70, 0.96, "C", fontsize=25, color="k", fontweight="bold")
 
-plt.savefig('fig2.pdf', format="pdf", bbox_inches='tight')
+plt.savefig('fig1.pdf', format="pdf", bbox_inches='tight')
 plt.show()
 
