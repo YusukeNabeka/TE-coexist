@@ -34,16 +34,16 @@ After generating the necessary data, run the following scripts to produce the fi
 
 | Figure | Description | Command | Pre-requisite |
 | :--- | :--- | :--- | :--- |
-| **Fig 1** | Post-invasion equilibrium states in parameter space $(f, c)$| `python fig1.py` | Run `f-vs-c.py` |
-| **Fig 2** | Invasion threshold analysis | `python fig2.py` | - |
-| **Fig 3** | Growth rate of KZFP ($\sigma$) as a function of $p_{qs}$ | `python fig3.py` | - |
-| **Fig 4** | TE copy number $(n_{eq})$ vs. piRNA frequency $(p_{eq})$ | `python fig4.py` | - |
-| **Fig 5** | Evolutionary dynamics (Time-course) | `python fig5.py` | - |
-| **Fig A1** | Stability map | `python figA1.py` | Run `f-vs-c.py` |
-| **Fig A2** | Validation of quasi-equilibrium approximation | `python figA2.py` | - |
-| **Fig A3** | Post-invasion equilibrium states in parameter space $(u, s)$ | `python figA3.py` | Run `u-vs-s.py` |
-| **Fig A4** | Post-invasion equilibrium states in parameter space $(\pi, s)$ | `python figA4.py` | Run `pi-vs-s.py` |
-| **Fig A5** | Forward simulation results overlaid on $(f, c)$ space | `python figA5.py` | Run `f-vs-c.py` & Julia simulations |
-| **Fig A6** | Trajectories from the forward simulations | `python figA6.py` | Run Julia simulations |
+| **Figure 1** | Invasion threshold analysis | `python fig1.py` | - |
+| **Figure 2** | Post-invasion equilibrium states in parameter space $(f, c)$| `python fig2.py` | Run `f-vs-c.py` |
+| **Figure 3** | Growth rate of KZFP ($\sigma$) as a function of $p_{qs}$ | `python fig3.py` | - |
+| **Figure 4** | TE copy number $(n_{eq})$ vs. piRNA frequency $(p_{eq})$ | `python fig4.py` | - |
+| **Figure 5** | Evolutionary dynamics (Time-course) | `python fig5.py` | - |
+| **Figure A1** | Stability map | `python figA1.py` | Run `f-vs-c.py` |
+| **Figure A2** | Validation of quasi-equilibrium approximation | `python figA2.py` | - |
+| **Figure A3** | Post-invasion equilibrium states in parameter space $(u, s)$ | `python figA3.py` | Run `u-vs-s.py` |
+| **Figure A4** | Post-invasion equilibrium states in parameter space $(\pi, s)$ | `python figA4.py` | Run `pi-vs-s.py` |
+| **Figure A5** | Forward simulation results overlaid on $(f, c)$ space | `python figA5.py` | Run `f-vs-c.py` & Julia simulations |
+| **Figure A6** | Trajectories from the forward simulations | `python figA6.py` | Run Julia simulations |
 
-*(Note: For **Fig A5** and **Fig A6**, you must run the forward simulations in the `simulation/` directory to generate the required simulation data before plotting. See `simulation/README.md` for details.)*
+*(Note: For **Figure A5** and **Figure A6**, you must run the forward simulations in the `simulation/` directory to generate the required simulation data before plotting. See `simulation/README.md` for details.)*
