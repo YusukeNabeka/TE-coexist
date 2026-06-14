@@ -514,7 +514,7 @@ for ax in ax789:
     ax.set_xlim(1e-4, 1.0)
     ax.tick_params(labelsize=15)
     ax.set_ylabel("$s$ (selection coefficient)", fontsize=15)
-    ax.set_xlabel("$\\pi$ (piRNA cluster proportion)", fontsize=15)
+    ax.set_xlabel("$\\pi$ (piRNA cluster fraction)", fontsize=15)
 
 fig.text(0.06, 0.96, "A", fontsize=25, color="k", fontweight="bold")
 fig.text(0.36, 0.96, "B", fontsize=25, color="k", fontweight="bold")
