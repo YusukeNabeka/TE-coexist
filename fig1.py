@@ -1,4 +1,4 @@
-#fig1
+#fig2
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
@@ -1060,5 +1060,5 @@ fig.text(0.36, 0.96, "B", fontsize=25, color="k", fontweight="bold")
 fig.text(0.66, 0.96, "C", fontsize=25, color="k", fontweight="bold")
 
 plt.subplots_adjust(wspace=3, hspace=10)
-plt.savefig('fig1.pdf', format="pdf", bbox_inches='tight')
+plt.savefig('fig2.pdf', format="pdf", bbox_inches='tight')
 plt.show()
