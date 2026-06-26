@@ -22,7 +22,7 @@ Run the following scripts first to perform numerical calculations. These will ge
 
 | Script | Output File (`.pkl`) | Used for |
 | :--- | :--- | :--- |
-| `f-vs-c.py` | `f-vs-c_*.pkl` | **Figure 1**, **Figure A1** & **Figure A5** |
+| `f-vs-c.py` | `f-vs-c_*.pkl` | **Figure 2**, **Figure A1** & **Figure A5** |
 | `u-vs-s.py` | `u-vs-s_*.pkl` | **Figure A3** |
 | `pi-vs-s.py` | `pi-vs-s_*.pkl` | **Figure A4** |
 
