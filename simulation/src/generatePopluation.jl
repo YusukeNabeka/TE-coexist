@@ -1,4 +1,4 @@
-#src/generatePoplation.jl
+#src/generatePopulation.jl
 module SimPop
 
 using Random
